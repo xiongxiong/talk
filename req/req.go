@@ -29,7 +29,7 @@ func (r *Base) ResCh() chan interface{} {
 // NewReq ...
 func NewReq(ctx context.Context) *Base {
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = context.TODO()
 	}
 	return &Base{
 		ctx:   ctx,

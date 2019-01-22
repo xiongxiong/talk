@@ -3,9 +3,8 @@ package talk
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"talk/req"
-
-	"github.com/google/uuid"
 )
 
 var (
@@ -15,9 +14,11 @@ var (
 // NewTalk ...
 func NewTalk() *Talk {
 	return &Talk{
-		done:      make(chan signal),
-		reqCh:     make(chan req.Req, 10),
-		clientMap: make(map[uuid.UUID]*client),
+		done:  make(chan struct{}),
+		reqCh: make(chan req.Req, 10),
+		clients: clientMap{
+			clients: make(map[*ConnectRequest]*client),
+		},
 	}
 }
 
@@ -31,20 +32,27 @@ func Start() {
 	talk.Start()
 }
 
+// Stop ...
+func Stop() {
+	talk.Stop()
+}
+
+// ClientCount ...
+func ClientCount() int {
+	return talk.ClientCount()
+}
+
 // Talk ...
 type Talk struct {
-	sync.RWMutex
-	done      chan signal
-	reqCh     chan req.Req
-	clientMap map[uuid.UUID]*client
-	msgStamp  int64
+	done    chan struct{}
+	reqCh   chan req.Req
+	clients clientMap
 }
 
 // Request ...
 func (t *Talk) Request(req req.Req) {
 	switch r := req.(type) {
 	case ConnectRequest,
-		BroadcastRequest,
 		SendRequest:
 		t.reqCh <- req
 	default:
@@ -61,175 +69,159 @@ func (t *Talk) Start() {
 				switch r := req.(type) {
 				case ConnectRequest:
 					go connect(t, &r)
-				case BroadcastRequest:
-					go broadcast(t, &r)
 				case SendRequest:
-					go unicast(t, &r)
+					go send(t, &r)
 				}
 			case <-t.done:
+				t.clients = clientMap{
+					clients: make(map[*ConnectRequest]*client),
+				}
 				break
 			}
 		}
 	}()
 }
 
+// Stop ...
 func (t *Talk) Stop() {
-	// TODO
-	close(t.done)
+	select {
+	case t.done <- struct{}{}:
+	default:
+	}
 }
 
-func (t *Talk) connCount() int {
-	t.RLock()
-	defer t.RUnlock()
-
-	return len(t.clientMap)
+// ClientCount ...
+func (t *Talk) ClientCount() int {
+	return len(t.clients.clients)
 }
 
-type client struct {
-	c         chan *MsgOut
-	done      chan signal
-	filterMap FilterMap
-}
-
-// Client ...
-type Client struct {
-	C    <-chan *MsgOut
-	Done chan<- signal
-}
-
-// FilterMap ...
-type FilterMap struct {
-	sync.RWMutex
-	Map map[Filter]int64 // filter -- msgstamp
+// Msg ...
+type Msg struct {
+	Content  interface{}
+	MsgStamp int64
 }
 
 // Filter ...
-type Filter interface {
-	// Filt return true if permit to send
-	Filt(keywords []string) bool
+type Filter func(keys []interface{}) bool
+
+// Done ...
+type Done interface {
+	Done() <-chan struct{}
+	Close()
 }
 
-type signal struct{}
-
-// MsgIn ...
-type MsgIn struct {
-	Content string
+// Conn ...
+type Conn interface {
+	C() <-chan *Msg
 }
 
-// MsgOut ...
-type MsgOut struct {
-	MsgIn
-	MsgStamp int64
+type conn struct {
+	c        chan *Msg
+	msgStamp int64
+}
+
+func (c conn) C() <-chan *Msg {
+	return c.c
+}
+
+func (c conn) MsgStamp() int64 {
+	atomic.AddInt64(&c.msgStamp, 1)
+	return c.msgStamp
+}
+
+// Client ...
+type Client interface {
+	Done
+	GetConn(filter *Filter) Conn
+}
+
+type client struct {
+	connMap map[*Filter]conn
+	done    chan struct{}
+}
+
+func (c *client) Done() <-chan struct{} {
+	return c.done
+}
+
+func (c *client) Close() {
+	c.done <- struct{}{}
+}
+
+func (c *client) GetConn(filter *Filter) Conn {
+	return c.connMap[filter]
+}
+
+type clientMap struct {
+	sync.RWMutex
+	clients map[*ConnectRequest]*client
 }
 
 // ConnectRequest ...
 type ConnectRequest struct {
 	req.Req
-	UUID    uuid.UUID
 	Filters []Filter
 }
 
-// Res ...
-func (r *ConnectRequest) Res() (*Client, error) {
-	res := <-r.ResCh()
-	if cli, ok := res.(*Client); ok {
-		return cli, nil
-	}
-	return nil, errors.New("connect failure")
-}
-
 func connect(t *Talk, req *ConnectRequest) {
-	t.RLock()
-	cli := t.clientMap[req.UUID]
-	if cli != nil {
-		close(cli.done)
-	}
-	t.RUnlock()
-
-	cli = &client{
-		c:    make(chan *MsgOut, 10),
-		done: make(chan signal),
-		filterMap: FilterMap{
-			Map: map[Filter]int64{},
-		},
-	}
-	cli.filterMap.Lock()
-	for _, f := range req.Filters {
-		cli.filterMap.Map[f] = 0
-	}
-	cli.filterMap.Unlock()
-
-	t.Lock()
-	t.clientMap[req.UUID] = cli
-	t.Unlock()
-
-	go waitToClean(t, req.UUID)
-
-	req.ResCh() <- &Client{
-		C:    cli.c,
-		Done: cli.done,
-	}
-}
-
-func waitToClean(t *Talk, uid uuid.UUID) {
-	t.RLock()
-	cli := t.clientMap[uid]
-	t.RUnlock()
-
-	if cli != nil {
-		_, open := <-cli.done
-		if open {
-			close(cli.done)
+	select {
+	case <-req.Ctx().Done():
+		req.ResCh() <- req.Ctx().Err()
+	default:
+		connM := make(map[*Filter]conn)
+		for _, f := range req.Filters {
+			connM[&f] = conn{
+				c: make(chan *Msg, 1),
+			}
 		}
-		close(cli.c)
-	}
-	t.Lock()
-	delete(t.clientMap, uid)
-	t.Unlock()
-}
-
-// BroadcastRequest ...
-type BroadcastRequest struct {
-	req.Req
-	MsgIn
-}
-
-func broadcast(t *Talk, req *BroadcastRequest) {
-	t.msgStamp++
-	msg := MsgOut{
-		MsgIn:    req.MsgIn,
-		MsgStamp: t.msgStamp,
-	}
-	for _, cli := range t.clientMap {
-		if cli != nil {
-			cli.c <- &msg
+		cli := client{
+			connMap: connM,
+			done:    make(chan struct{}),
 		}
+
+		t.clients.Lock()
+		t.clients.clients[req] = &cli
+		t.clients.Unlock()
+
+		go func() {
+			<-cli.done
+			t.clients.Lock()
+			delete(t.clients.clients, req)
+			t.clients.Unlock()
+		}()
+
+		req.ResCh() <- &cli
 	}
-	req.ResCh() <- "success"
 }
 
 // SendRequest ...
 type SendRequest struct {
 	req.Req
-	MsgIn
-	Keywords []string
+	Content interface{}
+	Keys    []interface{}
 }
 
-func unicast(t *Talk, req *SendRequest) {
-	for _, cli := range t.clientMap {
-		if cli != nil {
-			cli.filterMap.Lock()
-			for f := range cli.filterMap.Map {
-				if f.Filt(req.Keywords) {
-					cli.filterMap.Map[f]++
-					cli.c <- &MsgOut{
-						MsgIn:    req.MsgIn,
-						MsgStamp: cli.filterMap.Map[f],
+func send(t *Talk, req *SendRequest) {
+	select {
+	case <-req.Ctx().Done():
+		req.ResCh() <- req.Ctx().Err()
+	default:
+		t.clients.RLock()
+		defer t.clients.RUnlock()
+		for _, cli := range t.clients.clients {
+			for f, c := range cli.connMap {
+				if (*f)(req.Keys) {
+					msg := Msg{
+						Content:  req.Content,
+						MsgStamp: c.MsgStamp(),
 					}
-					break
+					select {
+					case c.c <- &msg:
+					default:
+					}
 				}
 			}
-			cli.filterMap.Unlock()
 		}
+		req.ResCh() <- "success"
 	}
 }
