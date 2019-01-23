@@ -102,7 +102,7 @@ type Msg struct {
 }
 
 // Filter ...
-type Filter func(keys []interface{}) bool
+type Filter func(keys map[interface{}]interface{}) bool
 
 // Done ...
 type Done interface {
@@ -198,7 +198,7 @@ func connect(t *Talk, req *ConnectRequest) {
 type SendRequest struct {
 	req.Req
 	Content interface{}
-	Keys    []interface{}
+	Keys    map[interface{}]interface{}
 }
 
 func send(t *Talk, req *SendRequest) {

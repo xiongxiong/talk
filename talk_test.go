@@ -19,7 +19,7 @@ func init() {
 			talk.Stop()
 		})
 		It("should work for single request", func() {
-			filter := func(keys []interface{}) bool {
+			filter := func(keys map[interface{}]interface{}) bool {
 				return true
 			}
 			talk.Connect([]talk.Filter{filter})
@@ -30,7 +30,7 @@ func init() {
 			clis := []talk.Client{}
 			connect := func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				filter := func(keys []interface{}) bool {
+				filter := func(keys map[interface{}]interface{}) bool {
 					return true
 				}
 				cli, err := talk.Connect([]talk.Filter{filter})
@@ -56,10 +56,10 @@ func init() {
 	})
 	Describe("message should work", func() {
 		filter := func(keyword interface{}) talk.Filter {
-			return func(keys []interface{}) bool {
+			return func(keys map[interface{}]interface{}) bool {
 				ok := false
-				for _, key := range keys {
-					if key == keyword {
+				for k := range keys {
+					if k == keyword {
 						ok = true
 						break
 					}
@@ -150,9 +150,24 @@ func init() {
 			})
 		})
 	})
+	Measure("how many connections", func(b Benchmarker) {
+
+	}, 10)
 }
 
-func TestConnect(t *testing.T) {
+func TestTalk(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Connect Suite")
+	RunSpecs(t, "Talk Suite")
+}
+
+func BenchmarkTalk(b *testing.B) {
+	talk.Start()
+	defer talk.Stop()
+
+	filter := func(map[interface{}]interface{}) bool {
+		return true
+	}
+	for i := 0; i < b.N; i++ {
+		talk.Connect([]talk.Filter{filter})
+	}
 }
