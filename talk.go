@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
-	"talk/req"
 )
 
 var (
@@ -15,7 +14,7 @@ var (
 func NewTalk() *Talk {
 	return &Talk{
 		done:    make(chan struct{}),
-		reqCh:   make(chan req.Req, 10),
+		reqCh:   make(chan Req, 10),
 		clients: make(map[*Filter]*client),
 	}
 }
@@ -26,7 +25,7 @@ func SetDB(db DB) {
 }
 
 // Request ...
-func Request(req req.Req) {
+func Request(req Req) {
 	talk.Request(req)
 }
 
@@ -49,7 +48,7 @@ func ClientCount() int {
 type Talk struct {
 	sync.RWMutex
 	done    chan struct{}
-	reqCh   chan req.Req
+	reqCh   chan Req
 	clients map[*Filter]*client
 	db      DB
 }
@@ -60,7 +59,7 @@ func (t *Talk) SetDB(db DB) {
 }
 
 // Request ...
-func (t *Talk) Request(req req.Req) {
+func (t *Talk) Request(req Req) {
 	switch r := req.(type) {
 	case ConnectRequest,
 		SendRequest:
@@ -158,7 +157,7 @@ func (c *client) MsgStamp() int64 {
 
 // ConnectRequest ...
 type ConnectRequest struct {
-	req.Req
+	Req
 	Flt Filter
 }
 
@@ -189,7 +188,7 @@ func connect(t *Talk, req *ConnectRequest) {
 
 // SendRequest ...
 type SendRequest struct {
-	req.Req
+	Req
 	Keys    map[interface{}]interface{}
 	Content interface{}
 }

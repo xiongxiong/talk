@@ -7,14 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"talk/req"
 	"time"
 )
 
 // Connect ...
-func Connect(ctx context.Context, flt Filter) <-chan Client {
+func Connect(ctx context.Context, requestID string, flt Filter) <-chan Client {
 	req := ConnectRequest{
-		Req: req.NewReq(ctx),
+		Req: NewReq(ctx, requestID),
 		Flt: flt,
 	}
 	Request(req)
@@ -31,7 +30,8 @@ func Connect(ctx context.Context, flt Filter) <-chan Client {
 	return c
 }
 
-type MsgJson struct {
+// MsgJSON ...
+type MsgJSON struct {
 	Keys      map[interface{}]interface{} `json:"keys"`
 	Content   interface{}                 `json:"content"`
 	MsgStamp  int64                       `json:"msgstamp"`
@@ -39,7 +39,7 @@ type MsgJson struct {
 }
 
 // SSEConnect ...
-func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) {
+func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Filter) {
 	f, ok := w.(http.Flusher)
 	if !ok {
 		panic(errors.New("Flush() not supported"))
@@ -48,7 +48,7 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) {
 	var cli Client
 	select {
 	case <-r.Context().Done():
-	case cli = <-Connect(r.Context(), flt):
+	case cli = <-Connect(r.Context(), requestID, flt):
 	}
 	if cli == nil {
 		return
@@ -63,7 +63,7 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) {
 			cli.Close()
 			break
 		case msg := <-cli.C():
-			b, err := json.Marshal(MsgJson{
+			b, err := json.Marshal(MsgJSON{
 				Keys:      msg.Keys,
 				Content:   msg.Content,
 				MsgStamp:  msg.MsgStamp,
@@ -88,12 +88,9 @@ func WSConnect(filters []Filter) <-chan Client {
 }
 
 // Send ...
-func Send(keys []interface{}, content interface{}) interface{} {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
+func Send(ctx context.Context, requestID string, keys []interface{}, content interface{}) interface{} {
 	req := SendRequest{
-		Req:     req.NewReq(ctx),
+		Req:     NewReq(ctx, requestID),
 		Content: content,
 	}
 	Request(req)
