@@ -64,10 +64,10 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) {
 			break
 		case msg := <-cli.C():
 			b, err := json.Marshal(MsgJson{
-				Keys: msg.Keys,
-				Content: msg.Content,
-				MsgStamp: msg.MsgStamp,
-				CreatedAt: time.Now().Format("2006-01-02 15:04:05")
+				Keys:      msg.Keys,
+				Content:   msg.Content,
+				MsgStamp:  msg.MsgStamp,
+				CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
 			})
 			if err != nil {
 				continue
