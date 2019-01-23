@@ -39,7 +39,7 @@ type MsgJSON struct {
 }
 
 // SSEConnect ...
-func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Filter) {
+func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Filter) <-chan struct{} {
 	f, ok := w.(http.Flusher)
 	if !ok {
 		panic(errors.New("Flush() not supported"))
@@ -51,40 +51,43 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Fi
 	case cli = <-Connect(r.Context(), requestID, flt):
 	}
 	if cli == nil {
-		return
+		return nil
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 
-	formatStr := "event:message\ndata:%s\n\n"
-	for {
-		select {
-		case <-r.Context().Done():
-			cli.Close()
-			break
-		case msg := <-cli.C():
-			b, err := json.Marshal(MsgJSON{
-				Keys:      msg.Keys,
-				Content:   msg.Content,
-				MsgStamp:  msg.MsgStamp,
-				CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
-			})
-			if err != nil {
-				continue
+	go func() {
+		for {
+			select {
+			case <-r.Context().Done():
+				cli.Close()
+				break
+			case msg := <-cli.C():
+				b, err := json.Marshal(MsgJSON{
+					Keys:      msg.Keys,
+					Content:   msg.Content,
+					MsgStamp:  msg.MsgStamp,
+					CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
+				})
+				if err != nil {
+					continue
+				}
+				formatStr := "event:message\ndata:%s\n\n"
+				_, err = w.Write(bytes.NewBufferString(fmt.Sprintf(formatStr, string(b))).Bytes())
+				if err != nil {
+					continue
+				}
+				f.Flush()
 			}
-			_, err = w.Write(bytes.NewBufferString(fmt.Sprintf(formatStr, string(b))).Bytes())
-			if err != nil {
-				continue
-			}
-			f.Flush()
 		}
-	}
+	}()
+
+	return cli.Done()
 }
 
 // WSConnect ...
-func WSConnect(filters []Filter) <-chan Client {
-	c := make(chan Client)
-	return c
+func WSConnect(filters []Filter) <-chan struct{} {
+	return nil
 }
 
 // Send ...

@@ -125,14 +125,10 @@ type Msg struct {
 // Filter ...
 type Filter func(keys map[interface{}]interface{}) bool
 
-// Closer ...
-type Closer interface {
-	Close()
-}
-
 // Client ...
 type Client interface {
-	Closer
+	Close()
+	Done() <-chan struct{}
 	C() <-chan *Msg
 }
 
@@ -144,6 +140,10 @@ type client struct {
 
 func (c *client) Close() {
 	c.done <- struct{}{}
+}
+
+func (c *client) Done() <-chan struct{} {
+	return c.done
 }
 
 func (c *client) C() <-chan *Msg {
@@ -177,6 +177,8 @@ func connect(t *Talk, req *ConnectRequest) {
 
 		go func() {
 			<-cli.done
+			close(cli.done)
+
 			t.Lock()
 			delete(t.clients, &req.Flt)
 			t.Unlock()
