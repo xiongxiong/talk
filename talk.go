@@ -47,6 +47,7 @@ type Talk struct {
 	done    chan struct{}
 	reqCh   chan req.Req
 	clients clientMap
+	db      DB
 }
 
 // Request ...
@@ -197,8 +198,13 @@ func connect(t *Talk, req *ConnectRequest) {
 // SendRequest ...
 type SendRequest struct {
 	req.Req
-	Content interface{}
 	Keys    map[interface{}]interface{}
+	Content interface{}
+}
+
+// DB ...
+type DB interface {
+	Save(msg *SendRequest) error
 }
 
 func send(t *Talk, req *SendRequest) {
@@ -206,6 +212,13 @@ func send(t *Talk, req *SendRequest) {
 	case <-req.Ctx().Done():
 		req.ResCh() <- req.Ctx().Err()
 	default:
+		if t.db != nil {
+			err := t.db.Save(req)
+			if err != nil {
+				req.ResCh() <- err
+				return
+			}
+		}
 		t.clients.RLock()
 		defer t.clients.RUnlock()
 		for _, cli := range t.clients.clients {
