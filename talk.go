@@ -20,6 +20,11 @@ func NewTalk() *Talk {
 	}
 }
 
+// SetDB ...
+func SetDB(db DB) {
+	talk.db = db
+}
+
 // Request ...
 func Request(req req.Req) {
 	talk.Request(req)
@@ -47,6 +52,11 @@ type Talk struct {
 	reqCh   chan req.Req
 	clients map[*Filter]*client
 	db      DB
+}
+
+// SetDB ...
+func (t *Talk) SetDB(db DB) {
+	t.db = db
 }
 
 // Request ...
