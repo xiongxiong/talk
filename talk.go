@@ -95,6 +95,17 @@ func (t *Talk) ClientCount() int {
 	return len(t.clients)
 }
 
+// DB ...
+type DB interface {
+	Save(msg DBMsg) error
+}
+
+// DBMsg ...
+type DBMsg interface {
+	MsgKeys() map[interface{}]interface{}
+	MsgContent() interface{}
+}
+
 // Msg ...
 type Msg struct {
 	Keys     map[interface{}]interface{}
@@ -173,9 +184,14 @@ type SendRequest struct {
 	Content interface{}
 }
 
-// DB ...
-type DB interface {
-	Save(msg *SendRequest) error
+// MsgKeys ...
+func (r *SendRequest) MsgKeys() map[interface{}]interface{} {
+	return r.Keys
+}
+
+// MsgContent ...
+func (r *SendRequest) MsgContent() interface{} {
+	return r.Content
 }
 
 func send(t *Talk, req *SendRequest) {
