@@ -1,6 +1,7 @@
 package talk_test
 
 import (
+	"context"
 	"sync"
 	"talk"
 	"testing"
@@ -19,22 +20,38 @@ func init() {
 			talk.Stop()
 		})
 		It("should work for single request", func() {
-			filter := func(keys map[interface{}]interface{}) bool {
+			flt := func(keys map[interface{}]interface{}) bool {
 				return true
 			}
-			talk.Connect([]talk.Filter{filter})
+			<-talk.Connect(context.TODO(), flt)
 
 			Expect(talk.ClientCount()).To(Equal(1))
+		})
+		It("should work for timeout", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+
+			time.Sleep(3 * time.Second)
+
+			var cli talk.Client
+			flt := func(keys map[interface{}]interface{}) bool {
+				return true
+			}
+			select {
+			case <-ctx.Done():
+			case res := <-talk.Connect(ctx, flt):
+				cli = res
+			}
+			Expect(cli).To(BeNil())
 		})
 		It("should work for mutiple request", func() {
 			clis := []talk.Client{}
 			connect := func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				filter := func(keys map[interface{}]interface{}) bool {
+				flt := func(keys map[interface{}]interface{}) bool {
 					return true
 				}
-				cli, err := talk.Connect([]talk.Filter{filter})
-				Expect(err).To(BeNil())
+				cli := <-talk.Connect(context.TODO(), flt)
 				Expect(cli).NotTo(BeNil())
 				clis = append(clis, cli)
 			}
@@ -67,12 +84,11 @@ func init() {
 				return ok
 			}
 		}
-		connect := func(key interface{}) talk.Conn {
+		connect := func(key interface{}) talk.Client {
 			flt := filter(key)
-			cli, err := talk.Connect([]talk.Filter{flt})
-			Expect(err).To(BeNil())
+			cli := <-talk.Connect(context.TODO(), flt)
 			Expect(cli).NotTo(BeNil())
-			return cli.GetConn(&flt)
+			return cli
 		}
 
 		BeforeEach(func() {
@@ -164,10 +180,10 @@ func BenchmarkTalk(b *testing.B) {
 	talk.Start()
 	defer talk.Stop()
 
-	filter := func(map[interface{}]interface{}) bool {
+	flt := func(map[interface{}]interface{}) bool {
 		return true
 	}
 	for i := 0; i < b.N; i++ {
-		talk.Connect([]talk.Filter{filter})
+		talk.Connect(context.TODO(), flt)
 	}
 }

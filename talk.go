@@ -14,11 +14,9 @@ var (
 // NewTalk ...
 func NewTalk() *Talk {
 	return &Talk{
-		done:  make(chan struct{}),
-		reqCh: make(chan req.Req, 10),
-		clients: clientMap{
-			clients: make(map[*ConnectRequest]*client),
-		},
+		done:    make(chan struct{}),
+		reqCh:   make(chan req.Req, 10),
+		clients: make(map[*Filter]*client),
 	}
 }
 
@@ -44,9 +42,10 @@ func ClientCount() int {
 
 // Talk ...
 type Talk struct {
+	sync.RWMutex
 	done    chan struct{}
 	reqCh   chan req.Req
-	clients clientMap
+	clients map[*Filter]*client
 	db      DB
 }
 
@@ -74,9 +73,9 @@ func (t *Talk) Start() {
 					go send(t, &r)
 				}
 			case <-t.done:
-				t.clients = clientMap{
-					clients: make(map[*ConnectRequest]*client),
-				}
+				t.Lock()
+				t.clients = make(map[*Filter]*client)
+				t.Unlock()
 				break
 			}
 		}
@@ -93,11 +92,12 @@ func (t *Talk) Stop() {
 
 // ClientCount ...
 func (t *Talk) ClientCount() int {
-	return len(t.clients.clients)
+	return len(t.clients)
 }
 
 // Msg ...
 type Msg struct {
+	Keys     map[interface{}]interface{}
 	Content  interface{}
 	MsgStamp int64
 }
@@ -105,63 +105,40 @@ type Msg struct {
 // Filter ...
 type Filter func(keys map[interface{}]interface{}) bool
 
-// Done ...
-type Done interface {
-	Done() <-chan struct{}
+// Closer ...
+type Closer interface {
 	Close()
-}
-
-// Conn ...
-type Conn interface {
-	C() <-chan *Msg
-}
-
-type conn struct {
-	c        chan *Msg
-	msgStamp int64
-}
-
-func (c conn) C() <-chan *Msg {
-	return c.c
-}
-
-func (c conn) MsgStamp() int64 {
-	atomic.AddInt64(&c.msgStamp, 1)
-	return c.msgStamp
 }
 
 // Client ...
 type Client interface {
-	Done
-	GetConn(filter *Filter) Conn
+	Closer
+	C() <-chan *Msg
 }
 
 type client struct {
-	connMap map[*Filter]conn
-	done    chan struct{}
-}
-
-func (c *client) Done() <-chan struct{} {
-	return c.done
+	c        chan *Msg
+	done     chan struct{}
+	msgStamp int64
 }
 
 func (c *client) Close() {
 	c.done <- struct{}{}
 }
 
-func (c *client) GetConn(filter *Filter) Conn {
-	return c.connMap[filter]
+func (c *client) C() <-chan *Msg {
+	return c.c
 }
 
-type clientMap struct {
-	sync.RWMutex
-	clients map[*ConnectRequest]*client
+func (c *client) MsgStamp() int64 {
+	atomic.AddInt64(&c.msgStamp, 1)
+	return c.msgStamp
 }
 
 // ConnectRequest ...
 type ConnectRequest struct {
 	req.Req
-	Filters []Filter
+	Flt Filter
 }
 
 func connect(t *Talk, req *ConnectRequest) {
@@ -169,26 +146,20 @@ func connect(t *Talk, req *ConnectRequest) {
 	case <-req.Ctx().Done():
 		req.ResCh() <- req.Ctx().Err()
 	default:
-		connM := make(map[*Filter]conn)
-		for _, f := range req.Filters {
-			connM[&f] = conn{
-				c: make(chan *Msg, 1),
-			}
-		}
 		cli := client{
-			connMap: connM,
-			done:    make(chan struct{}),
+			c:    make(chan *Msg),
+			done: make(chan struct{}),
 		}
 
-		t.clients.Lock()
-		t.clients.clients[req] = &cli
-		t.clients.Unlock()
+		t.Lock()
+		t.clients[&req.Flt] = &cli
+		t.Unlock()
 
 		go func() {
 			<-cli.done
-			t.clients.Lock()
-			delete(t.clients.clients, req)
-			t.clients.Unlock()
+			t.Lock()
+			delete(t.clients, &req.Flt)
+			t.Unlock()
 		}()
 
 		req.ResCh() <- &cli
@@ -219,19 +190,18 @@ func send(t *Talk, req *SendRequest) {
 				return
 			}
 		}
-		t.clients.RLock()
-		defer t.clients.RUnlock()
-		for _, cli := range t.clients.clients {
-			for f, c := range cli.connMap {
-				if (*f)(req.Keys) {
-					msg := Msg{
-						Content:  req.Content,
-						MsgStamp: c.MsgStamp(),
-					}
-					select {
-					case c.c <- &msg:
-					default:
-					}
+		t.RLock()
+		defer t.RUnlock()
+		for flt, cli := range t.clients {
+			if (*flt)(req.Keys) {
+				msg := Msg{
+					Keys:     req.Keys,
+					Content:  req.Content,
+					MsgStamp: cli.MsgStamp(),
+				}
+				select {
+				case cli.c <- &msg:
+				default:
 				}
 			}
 		}
