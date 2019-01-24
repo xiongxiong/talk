@@ -139,7 +139,10 @@ type client struct {
 }
 
 func (c *client) Close() {
-	c.done <- struct{}{}
+	select {
+	case c.done <- struct{}{}:
+	default:
+	}
 }
 
 func (c *client) Done() <-chan struct{} {

@@ -28,7 +28,7 @@ func init() {
 			Expect(talk.ClientCount()).To(Equal(1))
 		})
 		It("should work for timeout", func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 
 			time.Sleep(3 * time.Second)
@@ -73,14 +73,17 @@ func init() {
 	})
 	Describe("message should work", func() {
 		filter := func(keyword interface{}) talk.Filter {
+			mutex := sync.RWMutex{}
 			return func(keys map[interface{}]interface{}) bool {
 				ok := false
+				mutex.RLock()
 				for k := range keys {
 					if k == keyword {
 						ok = true
 						break
 					}
 				}
+				mutex.RUnlock()
 				return ok
 			}
 		}

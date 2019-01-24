@@ -98,7 +98,7 @@ func Send(ctx context.Context, keys map[interface{}]interface{}, content interfa
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case res := <-req.ResCh():
-		return res
+	default:
+		return <-req.ResCh()
 	}
 }
