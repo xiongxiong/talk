@@ -57,7 +57,6 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 		for {
 			select {
 			case <-r.Context().Done():
-				cli.Close()
 				break
 			case msg := <-cli.C():
 				b, err := json.Marshal(MsgJSON{

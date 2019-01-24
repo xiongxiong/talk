@@ -93,10 +93,7 @@ func (t *Talk) Start() {
 
 // Stop ...
 func (t *Talk) Stop() {
-	select {
-	case t.done <- struct{}{}:
-	default:
-	}
+	t.done <- struct{}{}
 }
 
 // ClientCount ...
@@ -139,10 +136,7 @@ type client struct {
 }
 
 func (c *client) Close() {
-	select {
-	case c.done <- struct{}{}:
-	default:
-	}
+	c.done <- struct{}{}
 }
 
 func (c *client) Done() <-chan struct{} {
@@ -180,7 +174,6 @@ func connect(t *Talk, req *ConnectRequest) {
 
 		go func() {
 			<-cli.done
-			println("HHHHHHHHHHHHHHHHHHHHH")
 			close(cli.done)
 
 			t.Lock()
