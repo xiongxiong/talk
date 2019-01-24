@@ -91,9 +91,10 @@ func WSConnect(filters []Filter) <-chan struct{} {
 }
 
 // Send ...
-func Send(ctx context.Context, requestID string, keys []interface{}, content interface{}) interface{} {
+func Send(ctx context.Context, requestID string, keys map[interface{}]interface{}, content interface{}) interface{} {
 	req := SendRequest{
 		Req:     NewReq(ctx, requestID),
+		Keys:    keys,
 		Content: content,
 	}
 	Request(req)
