@@ -180,6 +180,7 @@ func connect(t *Talk, req *ConnectRequest) {
 
 		go func() {
 			<-cli.done
+			println("HHHHHHHHHHHHHHHHHHHHH")
 			close(cli.done)
 
 			t.Lock()
