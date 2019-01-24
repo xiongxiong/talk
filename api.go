@@ -54,10 +54,14 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 	w.Header().Set("Content-Type", "text/event-stream")
 
 	go func() {
-		for {
+		done := true
+	DONE:
+		for done {
 			select {
 			case <-r.Context().Done():
-				break
+				done = false
+				cli.Close()
+				break DONE
 			case msg := <-cli.C():
 				b, err := json.Marshal(MsgJSON{
 					Keys:      msg.Keys,
