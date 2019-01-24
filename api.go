@@ -80,6 +80,8 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 				f.Flush()
 			}
 		}
+
+		w.Header().Set("Content-Type", "application/json")
 	}()
 
 	return cli
