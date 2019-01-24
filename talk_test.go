@@ -23,7 +23,7 @@ func init() {
 			flt := func(keys map[interface{}]interface{}) bool {
 				return true
 			}
-			<-talk.Connect(context.TODO(), flt)
+			talk.Connect(context.TODO(), flt)
 
 			Expect(talk.ClientCount()).To(Equal(1))
 		})
@@ -39,8 +39,8 @@ func init() {
 			}
 			select {
 			case <-ctx.Done():
-			case res := <-talk.Connect(ctx, flt):
-				cli = res
+			default:
+				cli = talk.Connect(ctx, flt)
 			}
 			Expect(cli).To(BeNil())
 		})
@@ -51,7 +51,7 @@ func init() {
 				flt := func(keys map[interface{}]interface{}) bool {
 					return true
 				}
-				cli := <-talk.Connect(context.TODO(), flt)
+				cli := talk.Connect(context.TODO(), flt)
 				Expect(cli).NotTo(BeNil())
 				clis = append(clis, cli)
 			}
@@ -86,7 +86,7 @@ func init() {
 		}
 		connect := func(key interface{}) talk.Client {
 			flt := filter(key)
-			cli := <-talk.Connect(context.TODO(), flt)
+			cli := talk.Connect(context.TODO(), flt)
 			Expect(cli).NotTo(BeNil())
 			return cli
 		}
@@ -100,8 +100,10 @@ func init() {
 		Describe("send should work", func() {
 			It("should work when there is no client", func() {
 				times := 10
+				keys := make(map[interface{}]interface{})
+				keys["hello"] = nil
 				for i := 0; i < times; i++ {
-					res := talk.Send([]interface{}{"hello"}, "hello world")
+					res := talk.Send(context.TODO(), keys, "hello world")
 					Expect(res).To(Equal("success"))
 				}
 			})
@@ -110,10 +112,12 @@ func init() {
 			It("filter should work", func() {
 				go func() {
 					ticker := time.NewTicker(time.Second)
+					keys := make(map[interface{}]interface{})
+					keys["A"] = nil
 					for {
 						select {
 						case <-ticker.C:
-							res := talk.Send([]interface{}{"A"}, "AA")
+							res := talk.Send(context.TODO(), keys, "AA")
 							Expect(res).To(Equal("success"))
 						}
 					}

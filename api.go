@@ -11,23 +11,19 @@ import (
 )
 
 // Connect ...
-func Connect(ctx context.Context, requestID string, flt Filter) <-chan Client {
+func Connect(ctx context.Context, flt Filter) Client {
 	req := ConnectRequest{
-		Req: NewReq(ctx, requestID),
+		Req: NewReq(ctx),
 		Flt: flt,
 	}
 	Request(req)
-	c := make(chan Client)
-	go func() {
-		res := <-req.ResCh()
-		switch r := res.(type) {
-		case Client:
-			c <- r
-		default:
-			c <- nil
-		}
-	}()
-	return c
+	res := <-req.ResCh()
+	switch r := res.(type) {
+	case Client:
+		return r
+	default:
+		return nil
+	}
 }
 
 // MsgJSON ...
@@ -39,7 +35,7 @@ type MsgJSON struct {
 }
 
 // SSEConnect ...
-func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Filter) <-chan struct{} {
+func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 	f, ok := w.(http.Flusher)
 	if !ok {
 		panic(errors.New("Flush() not supported"))
@@ -48,7 +44,8 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Fi
 	var cli Client
 	select {
 	case <-r.Context().Done():
-	case cli = <-Connect(r.Context(), requestID, flt):
+	default:
+		cli = Connect(r.Context(), flt)
 	}
 	if cli == nil {
 		return nil
@@ -82,18 +79,18 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, requestID string, flt Fi
 		}
 	}()
 
-	return cli.Done()
+	return cli
 }
 
 // WSConnect ...
-func WSConnect(filters []Filter) <-chan struct{} {
+func WSConnect(filters []Filter) Client {
 	return nil
 }
 
 // Send ...
-func Send(ctx context.Context, requestID string, keys map[interface{}]interface{}, content interface{}) interface{} {
+func Send(ctx context.Context, keys map[interface{}]interface{}, content interface{}) interface{} {
 	req := SendRequest{
-		Req:     NewReq(ctx, requestID),
+		Req:     NewReq(ctx),
 		Keys:    keys,
 		Content: content,
 	}
