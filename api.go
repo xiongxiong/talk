@@ -50,6 +50,9 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 
 	w.Header().Set("Content-Type", "text/event-stream")
 
+	w.Write(bytes.NewBufferString("event:.\ndata:.\n\n").Bytes())
+	w.(http.Flusher).Flush()
+
 	go func() {
 		done := true
 	DONE:
