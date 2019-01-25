@@ -108,19 +108,19 @@ type DB interface {
 
 // DBMsg ...
 type DBMsg interface {
-	MsgKeys() map[interface{}]interface{}
+	MsgKeys() map[string]interface{}
 	MsgContent() interface{}
 }
 
 // Msg ...
 type Msg struct {
-	Keys     map[interface{}]interface{}
+	Keys     map[string]interface{}
 	Content  interface{}
 	MsgStamp int64
 }
 
 // Filter ...
-type Filter func(keys map[interface{}]interface{}) bool
+type Filter func(keys map[string]interface{}) bool
 
 // Client ...
 type Client interface {
@@ -188,12 +188,12 @@ func connect(t *Talk, req *ConnectRequest) {
 // SendRequest ...
 type SendRequest struct {
 	Req
-	Keys    map[interface{}]interface{}
+	Keys    map[string]interface{}
 	Content interface{}
 }
 
 // MsgKeys ...
-func (r *SendRequest) MsgKeys() map[interface{}]interface{} {
+func (r *SendRequest) MsgKeys() map[string]interface{} {
 	return r.Keys
 }
 

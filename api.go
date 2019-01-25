@@ -28,10 +28,10 @@ func Connect(ctx context.Context, flt Filter) Client {
 
 // MsgJSON ...
 type MsgJSON struct {
-	Keys      map[interface{}]interface{} `json:"keys"`
-	Content   interface{}                 `json:"content"`
-	MsgStamp  int64                       `json:"msgstamp"`
-	CreatedAt string                      `json:"createdAt"`
+	Keys      map[string]interface{} `json:"keys"`
+	Content   interface{}            `json:"content"`
+	MsgStamp  int64                  `json:"msgstamp"`
+	CreatedAt string                 `json:"createdAt"`
 }
 
 // SSEConnect ...
@@ -52,9 +52,6 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
-
-	w.Write(bytes.NewBufferString("event:.\ndata:.\n\n").Bytes())
-	f.Flush()
 
 	go func() {
 		done := true
@@ -83,8 +80,6 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 				f.Flush()
 			}
 		}
-
-		w.Header().Set("Content-Type", "application/json")
 	}()
 
 	return cli
@@ -96,7 +91,7 @@ func WSConnect(filters []Filter) Client {
 }
 
 // Send ...
-func Send(ctx context.Context, keys map[interface{}]interface{}, content interface{}) interface{} {
+func Send(ctx context.Context, keys map[string]interface{}, content interface{}) interface{} {
 	req := SendRequest{
 		Req:     NewReq(ctx),
 		Keys:    keys,

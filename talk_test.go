@@ -20,7 +20,7 @@ func init() {
 			talk.Stop()
 		})
 		It("should work for single request", func() {
-			flt := func(keys map[interface{}]interface{}) bool {
+			flt := func(keys map[string]interface{}) bool {
 				return true
 			}
 			talk.Connect(context.TODO(), flt)
@@ -34,7 +34,7 @@ func init() {
 			time.Sleep(3 * time.Second)
 
 			var cli talk.Client
-			flt := func(keys map[interface{}]interface{}) bool {
+			flt := func(keys map[string]interface{}) bool {
 				return true
 			}
 			select {
@@ -48,7 +48,7 @@ func init() {
 			clis := []talk.Client{}
 			connect := func(wg *sync.WaitGroup) {
 				defer wg.Done()
-				flt := func(keys map[interface{}]interface{}) bool {
+				flt := func(keys map[string]interface{}) bool {
 					return true
 				}
 				cli := talk.Connect(context.TODO(), flt)
@@ -74,7 +74,7 @@ func init() {
 	Describe("message should work", func() {
 		filter := func(keyword interface{}) talk.Filter {
 			mutex := sync.RWMutex{}
-			return func(keys map[interface{}]interface{}) bool {
+			return func(keys map[string]interface{}) bool {
 				ok := false
 				mutex.RLock()
 				for k := range keys {
@@ -103,7 +103,7 @@ func init() {
 		Describe("send should work", func() {
 			It("should work when there is no client", func() {
 				times := 10
-				keys := make(map[interface{}]interface{})
+				keys := make(map[string]interface{})
 				keys["hello"] = nil
 				for i := 0; i < times; i++ {
 					res := talk.Send(context.TODO(), keys, "hello world")
@@ -115,7 +115,7 @@ func init() {
 			It("filter should work", func() {
 				go func() {
 					ticker := time.NewTicker(time.Second)
-					keys := make(map[interface{}]interface{})
+					keys := make(map[string]interface{})
 					keys["A"] = nil
 					for {
 						select {
@@ -187,7 +187,7 @@ func BenchmarkTalk(b *testing.B) {
 	talk.Start()
 	defer talk.Stop()
 
-	flt := func(map[interface{}]interface{}) bool {
+	flt := func(map[string]interface{}) bool {
 		return true
 	}
 	for i := 0; i < b.N; i++ {
