@@ -9,6 +9,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/sclevine/spec"
 )
 
 func init() {
@@ -193,4 +194,10 @@ func BenchmarkTalk(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		talk.Connect(context.TODO(), flt)
 	}
+}
+
+func TestConnect(t *testing.T) {
+	spec.Run(t, "connect", func(t *testing.T, when spec.G, it spec.S) {
+
+	})
 }

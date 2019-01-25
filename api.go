@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // Connect ...
@@ -36,11 +38,6 @@ type MsgJSON struct {
 
 // SSEConnect ...
 func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
-	f, ok := w.(http.Flusher)
-	if !ok {
-		panic(errors.New("Flush() not supported"))
-	}
-
 	var cli Client
 	select {
 	case <-r.Context().Done():
@@ -77,7 +74,7 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 				if err != nil {
 					continue
 				}
-				f.Flush()
+				w.(http.Flusher).Flush()
 			}
 		}
 	}()
@@ -86,8 +83,55 @@ func SSEConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
 }
 
 // WSConnect ...
-func WSConnect(filters []Filter) Client {
-	return nil
+func WSConnect(w http.ResponseWriter, r *http.Request, flt Filter) Client {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(errors.New("connection cannot be established"))
+	}
+
+	var cli Client
+	select {
+	case <-r.Context().Done():
+	default:
+		cli = Connect(r.Context(), flt)
+	}
+	if cli == nil {
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+
+	go func() {
+		done := true
+	DONE:
+		for done {
+			select {
+			case <-r.Context().Done():
+				done = false
+				cli.Close()
+				break DONE
+			case msg := <-cli.C():
+				b, err := json.Marshal(MsgJSON{
+					Keys:      msg.Keys,
+					Content:   msg.Content,
+					MsgStamp:  msg.MsgStamp,
+					CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
+				})
+				if err != nil {
+					continue
+				}
+				if err = conn.WriteMessage(websocket.TextMessage, b); err != nil {
+					continue
+				}
+			}
+		}
+	}()
+
+	return cli
 }
 
 // Send ...
